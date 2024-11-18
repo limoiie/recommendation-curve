@@ -4,13 +4,18 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   ColumnDef,
+  ColumnFiltersState,
   getCoreRowModel,
+  getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
   SortingState
 } from "@tanstack/table-core";
 import { flexRender, useReactTable } from "@tanstack/react-table";
 import { ChevronFirst, ChevronLast, ChevronLeft, ChevronRight } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { CardDescription } from "@/components/ui/card";
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
@@ -21,6 +26,10 @@ export function DataTable<TData, TValue>(
   {columns, data,}: DataTableProps<TData, TValue>
 ) {
   const [sorting, setSorting] = React.useState<SortingState>([])
+  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
+    []
+  )
+
   const table = useReactTable({
     data,
     columns,
@@ -28,13 +37,31 @@ export function DataTable<TData, TValue>(
     getPaginationRowModel: getPaginationRowModel(),
     onSortingChange: setSorting,
     getSortedRowModel: getSortedRowModel(),
+    onColumnFiltersChange: setColumnFilters,
+    getFilteredRowModel: getFilteredRowModel(),
     state: {
       sorting,
+      columnFilters,
     },
   })
 
   return (
     <div>
+      <div className="flex flex-col align-baseline gap-2 py-4">
+        <Label htmlFor="filter">过滤表达式:</Label>
+        <Input
+          id="filter"
+          placeholder="likes > 0 && comments > 0"
+          value={(table.getColumn("postWithProbability")?.getFilterValue() as string) ?? ""}
+          onChange={(event) =>
+            table.getColumn("postWithProbability")?.setFilterValue(event.target.value)
+          }
+          className="max-w-sm font-mono"
+        />
+        <CardDescription className="text-sm">
+          (JS 表达式，可用变量 <span className="font-mono">likes, comments, daysPastCreation, daysPastLastRecommendation</span>)
+        </CardDescription>
+      </div>
       <div className="rounded-md border">
         <Table>
           <TableHeader>

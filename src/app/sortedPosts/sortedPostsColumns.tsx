@@ -24,16 +24,30 @@ export function makeSortedPostColumns(maxX: number) {
   return [
     {
       accessorKey: "postWithProbability", header: "Post & Probability", cell: (data) =>
-        <PostCard className="w-64" data={data.row.original.post}/>
+        <PostCard className="w-64" data={data.row.original.post}/>,
+      filterFn: (row, _columnId, filterValue) => {
+        const {likes, comments, daysPastCreation, daysPastLastRecommendation} = row.original.post;
+        console.debug(likes, comments, daysPastCreation, daysPastLastRecommendation)
+        try {
+          return eval(filterValue);
+        } catch (e) {
+          console.debug(e)
+          return false;
+        }
+      }
     },
     {
-      accessorKey: "probabilityComponents", header: "Probability Components", cell: (data) =>
-        <div>
+      accessorKey: "probabilityComponents", header: "Probability Components", cell: (data) => {
+        const pc = data.row.original.probabilityComponents;
+        const deltaByDaysPastLastRecommendation = data.row.original.probability * (1 / pc.daysPastLastRecommendation - 1);
+        const deltaByDaysPastCreation = data.row.original.probability * (1 / pc.daysPastCreation / pc.daysPastLastRecommendation - 1 / pc.daysPastLastRecommendation);
+        return <div>
           <ChartContainer config={chartConfig} className="w-96 h-[24px] aspect-auto">
             <BarChart accessibilityLayer layout="vertical" barSize={10} data={[
               {
-                ...data.row.original.probabilityComponents,
-                daysPastLastRecommendation: 0,
+                ...pc,
+                daysPastLastRecommendation: deltaByDaysPastLastRecommendation,
+                daysPastCreation: deltaByDaysPastCreation,
               },
             ]}>
               <CartesianGrid horizontal={false}/>
@@ -54,42 +68,32 @@ export function makeSortedPostColumns(maxX: number) {
                 fill="var(--color-comments)"
                 fillOpacity={0.4}
                 stroke="var(--color-comments)"
-                radius={[0, 0, 0, 0]}
+                radius={[0, 4, 4, 0]}
               />
               <Bar
                 dataKey="daysPastCreation"
                 stackId="a"
                 fill="var(--color-daysPastCreation)"
-                fillOpacity={0.4}
+                fillOpacity={0.1}
                 stroke="var(--color-daysPastCreation)"
-                radius={[0, 4, 4, 0]}
+                strokeDasharray={3}
+                strokeDashoffset={4}
+                radius={[0, 0, 0, 0]}
               />
-            </BarChart>
-          </ChartContainer>
-          <ChartContainer config={chartConfig} className="w-96 h-[24px] mt-[-4px] aspect-auto">
-            <BarChart accessibilityLayer layout="vertical" barSize={10} data={[
-              {
-                ...data.row.original.probabilityComponents,
-                likes: 0,
-                comments: 0,
-                daysPastCreation: 0,
-              },
-            ]}>
-              <CartesianGrid horizontal={false}/>
-              <ChartTooltip content={<ChartTooltipContent hideLabel/>}/>
-              <XAxis hide type="number" domain={[0, 1]}/>
-              <YAxis hide type="category"/>
               <Bar
                 dataKey="daysPastLastRecommendation"
                 stackId="a"
                 fill="var(--color-daysPastLastRecommendation)"
-                fillOpacity={0.4}
+                fillOpacity={0.2}
                 stroke="var(--color-daysPastLastRecommendation)"
-                radius={[4, 4, 4, 4]}
+                strokeDasharray={3}
+                strokeDashoffset={4}
+                radius={[0, 0, 0, 0]}
               />
             </BarChart>
           </ChartContainer>
-        </div>
+        </div>;
+      }
     },
     {
       accessorKey: "probability", header: ((header) =>

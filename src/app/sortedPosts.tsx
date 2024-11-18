@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { makeSortedPostColumns, ProbabilityComponents, SortedPost } from "@/app/sortedPosts/sortedPostsColumns";
 import { DataTable } from "@/app/sortedPosts/data-table";
+import { CardDescription } from "@/components/ui/card";
 
 export default function SortedPosts({data, scoreFn}: {
   data: Post[],
@@ -24,7 +25,7 @@ export default function SortedPosts({data, scoreFn}: {
       sorted[i].probabilityComponents = {
         likes: sorted[i].probabilityComponents.likes / totalScore,
         comments: sorted[i].probabilityComponents.comments / totalScore,
-        daysPastCreation: sorted[i].probabilityComponents.daysPastCreation / totalScore,
+        daysPastCreation: sorted[i].probabilityComponents.daysPastCreation,
         daysPastLastRecommendation: sorted[i].probabilityComponents.daysPastLastRecommendation,
       }
     }
@@ -44,6 +45,18 @@ export default function SortedPosts({data, scoreFn}: {
       <div className="container mx-auto ">
         <DataTable columns={makeSortedPostColumns(maxX)} data={sortedPosts}/>
       </div>
+      <CardDescription className="m-auto">
+        注：Probability Components 列的条形图中，
+        <ul>
+          <li>
+            红色和绿色的部分加起来代表了该 Post 的最终推荐概率；
+          </li>
+          <li>
+            灰色框和黄色框的部分分别代表了新鲜度和遗忘度导致推荐概率减少的部分，
+            增加新鲜度或遗忘度会导致该部分减少，从而增加推荐概率。
+          </li>
+        </ul>
+      </CardDescription>
     </div>
   )
 }

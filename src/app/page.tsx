@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, XAxis } from "recharts";
+import { MathJax, MathJaxContext } from "better-react-mathjax";
 import { CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Input } from "@/components/ui/input";
@@ -44,29 +45,40 @@ function cartesianProduct(arr: number[][]) {
   return result;
 }
 
+function newPost({
+                   title = '',
+                   likes = 0,
+                   comments = 0,
+                   daysPastCreation = 0,
+                   daysPastLastRecommendation = 0
+                 }: Partial<Post>) {
+  return {
+    title: title,
+    likes: likes,
+    comments: comments,
+    daysPastCreation: daysPastCreation,
+    daysPastLastRecommendation: daysPastLastRecommendation,
+  };
+}
+
 export default function Home() {
-  const [weightPopularity, setWeightPopularity] = useState(5);
   const [alpha, setAlpha] = useState(0.5);
   const [chartDataPopularity, setChartDataPopularity] = useState([]);
   const [xsPopularity] = useState(range(0, 50, 10));
 
-  const [weightFreshness, setWeightFreshness] = useState(5);
   const [freshDays, setFreshDays] = useState(7);
-  const [decayRate, setDecayRate] = useState(0.8);
+  const [beta, setBeta] = useState(0.8);
   const [chartDataFreshness, setChartDataFreshness] = useState([]);
   const [xsFreshness] = useState(range(0, 28, 1));
 
-  const ratePopularity = useMemo(() => weightPopularity / (weightPopularity + weightFreshness), [weightPopularity, weightFreshness]);
-  const rateFreshness = useMemo(() => weightFreshness / (weightPopularity + weightFreshness), [weightPopularity, weightFreshness]);
-
-  const [gamma, setGamma] = useState(0.8);
-  const [delayDays, setDelayDays] = useState(7);
-  const [chartDataStaleness, setChartDataStaleness] = useState([]);
-  const [xsStaleness] = useState(range(0, 28, 1));
+  const [gamma, setGamma] = useState(0.5);
+  const [delayDays, setDelayDays] = useState(14);
+  const [chartDataForgetting, setChartDataForgetting] = useState([]);
+  const [xsForgetting] = useState(range(0, 28, 1));
 
   const allPosts = cartesianProduct([
-    [0, 10, 20, 50],
-    [0, 10, 20, 50],
+    [0, 10, 20, 40, 80, 160],
+    [0, 10, 20, 40, 80, 160],
     [2, 4, 8, 16],
     [-1, 2, 8, 16],
   ]).map(([likes, comments, daysPastCreation, daysPastLastRecommendation]) => {
@@ -79,91 +91,77 @@ export default function Home() {
     };
   });
 
+  const computeLikesScore = useMemo(() => (post: Post) => {
+    return alpha * (post.likes / 64);
+  }, [alpha])
+
+  const computeCommentsScore = useMemo(() => (post: Post) => {
+    return (1 - alpha) * (post.comments / 64);
+  }, [alpha])
+
+  const computeFreshnessScore = useMemo(() => (post: Post) => {
+    return 1 / (1 + Math.exp(beta * (post.daysPastCreation - freshDays)));
+  }, [beta, freshDays])
+
+  const computeForgettingScore = useMemo(() => (post: Post) => {
+    if (post.daysPastLastRecommendation < 0) {
+      return 1.0;
+    }
+    return 1.0 - Math.min(Math.exp(-gamma * (post.daysPastLastRecommendation - delayDays)), 1.0);
+  }, [gamma, delayDays])
+
   const scoreFn = useMemo(() => {
-    function computeLikesScore(post: Post) {
-      return alpha * (post.likes / 10);
-    }
-
-    function computeCommentsScore(post: Post) {
-      return (1 - alpha) * (post.comments / 10);
-    }
-
-    function computeFreshnessScore(post: Post) {
-      return 1 / (1 + Math.exp(decayRate * (post.daysPastCreation - freshDays)));
-    }
-
-    function computeStalenessScore(post: Post) {
-      if (post.daysPastLastRecommendation < 0) {
-        return 1.0;
-      }
-      return 1.0 - Math.min(Math.exp(-gamma * (post.daysPastLastRecommendation - delayDays)), 1.0);
-    }
-
     return (post: Post) => {
       const pl = computeLikesScore(post);
       const pc = computeCommentsScore(post);
       const f = computeFreshnessScore(post);
-      const s = computeStalenessScore(post);
-      const score = (ratePopularity * pl + ratePopularity * pc + rateFreshness * f) * s;
+      const s = computeForgettingScore(post);
+      const score = (pl + pc) * f * s;
       return {
         score: score,
         probabilityComponents: {
-          likes: pl * ratePopularity * s,
-          comments: pc * ratePopularity * s,
-          daysPastCreation: f * rateFreshness * s,
+          likes: pl * f * s,
+          comments: pc * f * s,
+          daysPastCreation: f,
           daysPastLastRecommendation: s,
         }
       }
     }
-  }, [ratePopularity, rateFreshness, alpha, decayRate, freshDays, gamma, delayDays]);
+  }, [computeLikesScore, computeCommentsScore, computeFreshnessScore, computeForgettingScore]);
 
   // Generate data for the popularity chart
   useEffect(() => {
     const chartDataPopularity = xsPopularity.map((x) => {
       return {
         count: x,
-        likes: alpha * (x / 10),
-        comments: (1 - alpha) * (x / 10),
+        likes: computeLikesScore(newPost({likes: x})),
+        comments: computeCommentsScore(newPost({comments: x})),
       };
     });
     setChartDataPopularity(chartDataPopularity as never[]);
-  }, [xsPopularity, alpha]);
+  }, [computeLikesScore, computeCommentsScore, xsPopularity, alpha]);
 
   // Generate data for the freshness chart
   useEffect(() => {
     const chartDataFreshness = xsFreshness.map((x) => {
       return {
         days: x,
-        daysPastCreation: 1 / (1 + Math.exp(decayRate * (x - freshDays))),
+        daysPastCreation: computeFreshnessScore(newPost({daysPastCreation: x})),
       };
     });
     setChartDataFreshness(chartDataFreshness as never[]);
-  }, [xsFreshness, freshDays, decayRate]);
+  }, [computeFreshnessScore, xsFreshness, freshDays, beta]);
 
-  // Generate data for the staleness chart
+  // Generate data for the Forgetting chart
   useEffect(() => {
-    const chartDataStaleness = xsStaleness.map((x) => {
+    const chartDataForgetting = xsForgetting.map((x) => {
       return {
         days: x,
-        daysPastLastRecommendation: 1.0 - Math.min(Math.exp(-gamma * (x - delayDays)), 1.0),
+        daysPastLastRecommendation: computeForgettingScore(newPost({daysPastLastRecommendation: x})),
       };
     });
-    setChartDataStaleness(chartDataStaleness as never[]);
-  }, [xsStaleness, gamma, delayDays]);
-
-  function handleWeightPopularityChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const newWeightPopularity = parseFloat(e.target.value);
-    if (!isNaN(newWeightPopularity) && newWeightPopularity >= 0 && newWeightPopularity <= 10) {
-      setWeightPopularity(newWeightPopularity);
-    }
-  }
-
-  function handleWeightFreshnessChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const newWeightFreshness = parseFloat(e.target.value);
-    if (!isNaN(newWeightFreshness) && newWeightFreshness >= 0 && newWeightFreshness <= 10) {
-      setWeightFreshness(newWeightFreshness);
-    }
-  }
+    setChartDataForgetting(chartDataForgetting as never[]);
+  }, [computeForgettingScore, xsForgetting, gamma, delayDays]);
 
   function handleAlphaChange(e: React.ChangeEvent<HTMLInputElement>) {
     const newAlpha = parseFloat(e.target.value);
@@ -182,7 +180,7 @@ export default function Home() {
   function handleDecayRateChange(e: React.ChangeEvent<HTMLInputElement>) {
     const newDecayRate = parseFloat(e.target.value);
     if (!isNaN(newDecayRate) && newDecayRate >= 0 && newDecayRate <= 28) {
-      setDecayRate(newDecayRate);
+      setBeta(newDecayRate);
     }
   }
 
@@ -201,319 +199,335 @@ export default function Home() {
   }
 
   return (
-    <div className="flex flex-row">
-      <ScrollArea className="h-screen">
-        <div className="flex flex-col w-[640px] min-w-[640px]">
-          <div className="flex flex-col m-8 mb-0 rounded border">
-            <CardHeader>
-              <CardTitle>Popularity Score</CardTitle>
-              <CardDescription>
-                A score derived from the number of likes and comments a post has received.
-                This indicates how engaging the post is.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-row space-x-4">
-                <div className="flex flex-col min-w-32 w-32 space-y-4">
-                  <div className="grid w-full max-w-sm items-center gap-1.5">
-                    <Label>Weight <span
-                      className="text-neutral-500">({(ratePopularity * 100).toFixed(1)}%)</span></Label>
-                    <Input
-                      type="number"
-                      step="0.5"
-                      id="weightPopularity"
-                      placeholder="Weight"
-                      value={weightPopularity}
-                      onChange={handleWeightPopularityChange}
-                      min={0}
-                      max={10}/>
+    <MathJaxContext>
+      <div className="flex flex-row">
+        <ScrollArea className="h-screen">
+          <div className="flex flex-col w-[640px] min-w-[640px]">
+            <div className="flex flex-col">
+              <CardHeader className="pb-0">
+                <CardTitle>整体推荐度评分公式</CardTitle>
+                <CardDescription>
+                  评分公式由人气评分、新鲜度评分和遗忘度三部分组成。
+                  每个部分的权重和参数可以调整以获得不同的推荐效果。
+                  <MathJax>
+                    {/*{String.raw`*/}
+                    {/*  \[*/}
+                    {/*    \mathtt{Score} = (*/}
+                    {/*    \frac{w_\mathtt{p}}{w_\mathtt{p} + w_\mathtt{f}} \times S_\mathtt{popularity} + */}
+                    {/*    \frac{w_\mathtt{f}}{w_\mathtt{p} + w_\mathtt{f}} \times S_\mathtt{freshness}) \times P_\mathtt{Forgetting} \\*/}
+                    {/*  \] `}*/}
+                    {String.raw`
+                      \[
+                        \mathtt{Score} = S_\mathtt{popularity} \times P_\mathtt{freshness} \times P_\mathtt{Forgetting} \\
+                      \] `}
+                  </MathJax>
+                </CardDescription>
+              </CardHeader>
+            </div>
+            <div className="flex flex-col m-8 mb-0 rounded border">
+              <CardHeader>
+                <CardTitle>人气评分 <span className="text-neutral-400">(点赞数+评论数)</span></CardTitle>
+                <CardDescription>
+                  根据帖子收到的点赞和评论数量得出的评分。
+                  这表明帖子有多吸引人。
+                  <MathJax>
+                    {String.raw`
+                      \[
+                        S_\mathtt{popularity} = \alpha \times n_\mathtt{Likes} + (1 - \alpha) \times n_\mathtt{Comments}
+                      \]
+                    `}
+                  </MathJax>
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-row space-x-4">
+                  <div className="flex flex-col min-w-32 w-32 space-y-4">
+                    <div className="grid w-full max-w-sm items-center gap-1.5">
+                      <Label><MathJax>{String.raw`\( \alpha \)`} <span className="text-neutral-500">(点赞数占比)</span></MathJax></Label>
+                      <Input
+                        type="number"
+                        step="0.05"
+                        id="alpha"
+                        placeholder="Alpha"
+                        value={alpha}
+                        onChange={handleAlphaChange}
+                        min={0}
+                        max={1}/>
+                    </div>
                   </div>
-                  <div className="grid w-full max-w-sm items-center gap-1.5">
-                    <Label>Alpha</Label>
-                    <Input
-                      type="number"
-                      step="0.05"
-                      id="alpha"
-                      placeholder="Alpha"
-                      value={alpha}
-                      onChange={handleAlphaChange}
-                      min={0}
-                      max={1}/>
-                  </div>
-                </div>
-                <div className="rounded border">
-                  <CardHeader>
-                    <CardTitle>Popularity Chart - Stacked</CardTitle>
-                    <CardDescription>
-                      A stacked area chart showing popularity components
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ChartContainer config={chartConfig}>
-                      <AreaChart
-                        accessibilityLayer
-                        data={chartDataPopularity}
-                        className="mr-3"
-                        margin={chartMargin}
-                      >
-                        <CartesianGrid vertical={false}/>
-                        <XAxis
-                          dataKey="count"
-                          tickLine={false}
-                          axisLine={false}
-                          tickMargin={8}
-                          tickFormatter={(value) => value}
-                        />
-                        <ChartTooltip
-                          cursor={false}
-                          content={<ChartTooltipContent indicator="dot"/>}
-                        />
-                        <Area
-                          dataKey="comments"
-                          type="natural"
-                          fill="var(--color-comments)"
-                          fillOpacity={0.4}
-                          stroke="var(--color-comments)"
-                          stackId="a"
-                        />
-                        <Area
-                          dataKey="likes"
-                          type="natural"
-                          fill="var(--color-likes)"
-                          fillOpacity={0.4}
-                          stroke="var(--color-likes)"
-                          stackId="a"
-                        />
-                      </AreaChart>
-                    </ChartContainer>
-                  </CardContent>
-                  <CardFooter>
-                    <div className="flex w-full items-start gap-2 text-sm">
-                      <div className="grid gap-2">
-                        <div className="flex items-center gap-2 font-medium leading-none">
-                          More likes or comments, more possible engagement
-                        </div>
-                        <div className="flex items-center gap-2 leading-none text-muted-foreground">
-                          January - June 2024
+                  <div className="rounded border">
+                    <CardHeader>
+                      <CardTitle>Popularity Chart - Stacked</CardTitle>
+                      <CardDescription>
+                        显示人气成分的堆叠面积图
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ChartContainer config={chartConfig}>
+                        <AreaChart
+                          accessibilityLayer
+                          data={chartDataPopularity}
+                          className="mr-3"
+                          margin={chartMargin}
+                        >
+                          <CartesianGrid vertical={false}/>
+                          <XAxis
+                            dataKey="count"
+                            tickLine={false}
+                            axisLine={false}
+                            tickMargin={8}
+                            tickFormatter={(value) => value}
+                          />
+                          <ChartTooltip
+                            cursor={false}
+                            content={<ChartTooltipContent indicator="dot"/>}
+                          />
+                          <Area
+                            dataKey="comments"
+                            type="basis"
+                            fill="var(--color-comments)"
+                            fillOpacity={0.4}
+                            stroke="var(--color-comments)"
+                            stackId="a"
+                          />
+                          <Area
+                            dataKey="likes"
+                            type="basis"
+                            fill="var(--color-likes)"
+                            fillOpacity={0.4}
+                            stroke="var(--color-likes)"
+                            stackId="a"
+                          />
+                        </AreaChart>
+                      </ChartContainer>
+                    </CardContent>
+                    <CardFooter>
+                      <div className="flex w-full items-start gap-2 text-sm">
+                        <div className="grid gap-2">
+                          {/*<div className="flex items-center gap-2 font-medium leading-none"> </div>*/}
+                          <div className="flex items-center gap-2 leading-none text-muted-foreground">
+                            X-坐标是点赞数或评论数
+                          </div>
                         </div>
                       </div>
+                    </CardFooter>
+                  </div>
+                </div>
+              </CardContent>
+            </div>
+            <div className="flex flex-col m-8 mb-0 rounded border">
+              <CardHeader>
+                <CardTitle>新鲜度</CardTitle>
+                <CardDescription>
+                  基于帖子创建或更新的时间得出的评分。
+                  这有助于优先考虑较新的内容。
+                  <MathJax>
+                    {String.raw`
+                      \[
+                        P_\mathtt{freshness} = \frac{1}{1 + e^{\beta \times (x - \mathtt{freshDays})}}
+                      \]
+                    `}
+                  </MathJax>
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-row space-x-4">
+                  <div className="flex flex-col min-w-32 w-32 space-y-4">
+                    <div className="grid w-full max-w-sm items-center gap-1.5">
+                      <Label><MathJax>{String.raw`\( \mathtt{freshDays} \)`} <span
+                        className="text-neutral-500">(该天数内新鲜度 &gt;0.5)</span></MathJax></Label>
+                      <Input
+                        type="number"
+                        step="1"
+                        id="freshDays"
+                        placeholder="Fresh Days"
+                        value={freshDays}
+                        onChange={handleFreshDaysChange}
+                        min={0}
+                        max={28}/>
                     </div>
-                  </CardFooter>
-                </div>
-              </div>
-            </CardContent>
-          </div>
-          <div className="flex flex-col m-8 mb-0 rounded border">
-            <CardHeader>
-              <CardTitle>Freshness Score</CardTitle>
-              <CardDescription>
-                A score based on how recently the post was created or updated.
-                This helps prioritize newer content.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-row space-x-4">
-                <div className="flex flex-col min-w-32 w-32 space-y-4">
-                  <div className="grid w-full max-w-sm items-center gap-1.5">
-                    <Label>Weight <span
-                      className="text-neutral-500">({(rateFreshness * 100).toFixed(1)}%)</span></Label>
-                    <Input
-                      type="number"
-                      step="0.5"
-                      id="weightFreshness"
-                      placeholder="Weight"
-                      value={weightFreshness}
-                      onChange={handleWeightFreshnessChange}
-                      min={0}
-                      max={10}/>
+                    <div className="grid w-full max-w-sm items-center gap-1.5">
+                      <Label><MathJax>{String.raw`\( \beta \)`} <span
+                        className="text-neutral-500">(衰退系数)</span></MathJax></Label>
+                      <Input
+                        type="number"
+                        step=".2"
+                        id="decayRate"
+                        placeholder="Decay Rate"
+                        value={beta}
+                        onChange={handleDecayRateChange}
+                        min={0}
+                        max={4}/>
+                    </div>
                   </div>
-                  <div className="grid w-full max-w-sm items-center gap-1.5">
-                    <Label>Fresh Days</Label>
-                    <Input
-                      type="number"
-                      step="1"
-                      id="freshDays"
-                      placeholder="Fresh Days"
-                      value={freshDays}
-                      onChange={handleFreshDaysChange}
-                      min={0}
-                      max={28}/>
-                  </div>
-                  <div className="grid w-full max-w-sm items-center gap-1.5">
-                    <Label>Decay Rate</Label>
-                    <Input
-                      type="number"
-                      step=".2"
-                      id="decayRate"
-                      placeholder="Decay Rate"
-                      value={decayRate}
-                      onChange={handleDecayRateChange}
-                      min={0}
-                      max={4}/>
-                  </div>
-                </div>
-                <div className="rounded border">
-                  <CardHeader>
-                    <CardTitle>Freshness Chart</CardTitle>
-                    <CardDescription>
-                      A stacked area chart showing the relationship between the freshness and the passed time
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ChartContainer config={chartConfig}>
-                      <AreaChart
-                        accessibilityLayer
-                        data={chartDataFreshness}
-                        className="mr-3"
-                        margin={chartMargin}
-                      >
-                        <CartesianGrid vertical={false}/>
-                        <XAxis
-                          dataKey="days"
-                          tickLine={false}
-                          axisLine={false}
-                          tickMargin={8}
-                          tickFormatter={(value) => value}
-                        />
-                        <ChartTooltip
-                          cursor={false}
-                          content={<ChartTooltipContent indicator="dot"/>}
-                        />
-                        <Area
-                          dataKey="daysPastCreation"
-                          type="natural"
-                          fill="var(--color-daysPastCreation)"
-                          fillOpacity={0.4}
-                          stroke="var(--color-daysPastCreation)"
-                          stackId="a"
-                        />
-                      </AreaChart>
-                    </ChartContainer>
-                  </CardContent>
-                  <CardFooter>
-                    <div className="flex w-full items-start gap-2 text-sm">
-                      <div className="grid gap-2">
-                        <div className="flex items-center gap-2 font-medium leading-none">
-                          More likes or comments, more possible engagement
-                        </div>
-                        <div className="flex items-center gap-2 leading-none text-muted-foreground">
-                          January - June 2024
+                  <div className="rounded border">
+                    <CardHeader>
+                      <CardTitle>Freshness Chart</CardTitle>
+                      <CardDescription>
+                        显示新鲜度和已创建时间之间的关系的曲线图
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ChartContainer config={chartConfig}>
+                        <AreaChart
+                          accessibilityLayer
+                          data={chartDataFreshness}
+                          className="mr-3"
+                          margin={chartMargin}
+                        >
+                          <CartesianGrid vertical={false}/>
+                          <XAxis
+                            dataKey="days"
+                            tickLine={false}
+                            axisLine={false}
+                            tickMargin={8}
+                            tickFormatter={(value) => value}
+                          />
+                          <ChartTooltip
+                            cursor={false}
+                            content={<ChartTooltipContent indicator="dot"/>}
+                          />
+                          <Area
+                            dataKey="daysPastCreation"
+                            type="basis"
+                            fill="var(--color-daysPastCreation)"
+                            fillOpacity={0.4}
+                            stroke="var(--color-daysPastCreation)"
+                            stackId="a"
+                          />
+                        </AreaChart>
+                      </ChartContainer>
+                    </CardContent>
+                    <CardFooter>
+                      <div className="flex w-full items-start gap-2 text-sm">
+                        <div className="grid gap-2">
+                          {/*<div className="flex items-center gap-2 font-medium leading-none"> </div>*/}
+                          <div className="flex items-center gap-2 leading-none text-muted-foreground">
+                            X-坐标是帖子创建或更新的天数
+                          </div>
                         </div>
                       </div>
+                    </CardFooter>
+                  </div>
+                </div>
+              </CardContent>
+            </div>
+            <div className="flex flex-col m-8 rounded border">
+              <CardHeader>
+                <CardTitle>遗忘度</CardTitle>
+                <CardDescription>
+                  基于上次推荐的时间得出的衰减因子，
+                  以避免过于频繁地推荐相同的帖子。
+                  <MathJax>
+                    {String.raw`
+                      \[
+                        P_\mathtt{Forgetting} = 1 - \min(e^{-\gamma \times (x - \mathtt{delayDays})}, 1)
+                      \]
+                    `}
+                  </MathJax>
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-row space-x-4">
+                  <div className="flex flex-col min-w-32 w-32 space-y-4">
+                    <div className="grid w-full max-w-sm items-center gap-1.5">
+                      <Label><MathJax>{String.raw`\( \mathtt{delayDays} \)`} <span
+                        className="text-neutral-500">(该天数后开始遗忘)</span></MathJax></Label>
+                      <Input
+                        type="number"
+                        step="1"
+                        id="delayDays"
+                        placeholder="Delay Days"
+                        value={delayDays}
+                        onChange={handleDelayDaysChange}
+                        min={0}
+                        max={28}/>
                     </div>
-                  </CardFooter>
-                </div>
-              </div>
-            </CardContent>
-          </div>
-          <div className="flex flex-col m-8 rounded border">
-            <CardHeader>
-              <CardTitle>Staleness Penalty</CardTitle>
-              <CardDescription>
-                A decaying factor based on the time since the last recommendation,
-                to avoid recommending the same post too frequently.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-row space-x-4">
-                <div className="flex flex-col min-w-32 w-32 space-y-4">
-                  <div className="grid w-full max-w-sm items-center gap-1.5">
-                    <Label>Delay Days</Label>
-                    <Input
-                      type="number"
-                      step="1"
-                      id="delayDays"
-                      placeholder="Delay Days"
-                      value={delayDays}
-                      onChange={handleDelayDaysChange}
-                      min={0}
-                      max={28}/>
+                    <div className="grid w-full max-w-sm items-center gap-1.5">
+                      <Label><MathJax>{String.raw`\( \gamma \)`} <span
+                        className="text-neutral-500">(衰退系数)</span></MathJax></Label>
+                      <Input
+                        type="number"
+                        step=".2"
+                        id="gamma"
+                        placeholder="Gamma"
+                        value={gamma}
+                        onChange={handleGammaChange}
+                        min={0}
+                        max={4}/>
+                    </div>
                   </div>
-                  <div className="grid w-full max-w-sm items-center gap-1.5">
-                    <Label>Gamma</Label>
-                    <Input
-                      type="number"
-                      step=".2"
-                      id="gamma"
-                      placeholder="Gamma"
-                      value={gamma}
-                      onChange={handleGammaChange}
-                      min={0}
-                      max={4}/>
-                  </div>
-                </div>
-                <div className="rounded border">
-                  <CardHeader>
-                    <CardTitle>Staleness Chart</CardTitle>
-                    <CardDescription>
-                      An area chart showing the relationship between staleness and the time since the last
-                      recommendation
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ChartContainer config={chartConfig}>
-                      <AreaChart
-                        accessibilityLayer
-                        data={chartDataStaleness}
-                        className="mr-3"
-                        margin={chartMargin}
-                      >
-                        <CartesianGrid vertical={false}/>
-                        <XAxis
-                          dataKey="days"
-                          tickLine={false}
-                          axisLine={false}
-                          tickMargin={8}
-                          tickFormatter={(value) => value}
-                        />
-                        <ChartTooltip
-                          cursor={false}
-                          content={<ChartTooltipContent indicator="dot"/>}
-                        />
-                        <Area
-                          dataKey="daysPastLastRecommendation"
-                          type="basis"
-                          fill="var(--color-daysPastLastRecommendation)"
-                          fillOpacity={0.4}
-                          stroke="var(--color-daysPastLastRecommendation)"
-                          stackId="a"
-                        />
-                      </AreaChart>
-                    </ChartContainer>
-                  </CardContent>
-                  <CardFooter>
-                    <div className="flex w-full items-start gap-2 text-sm">
-                      <div className="grid gap-2">
-                        <div className="flex items-center gap-2 font-medium leading-none">
-                          This penalizes posts that have been recommended recently.
-                        </div>
-                        <div className="flex items-center gap-2 leading-none text-muted-foreground">
-                          January - June 2024
+                  <div className="rounded border">
+                    <CardHeader>
+                      <CardTitle>Forgetting Chart</CardTitle>
+                      <CardDescription>
+                        显示陈旧度和上次推荐时间之间关系的曲线图
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ChartContainer config={chartConfig}>
+                        <AreaChart
+                          accessibilityLayer
+                          data={chartDataForgetting}
+                          className="mr-3"
+                          margin={chartMargin}
+                        >
+                          <CartesianGrid vertical={false}/>
+                          <XAxis
+                            dataKey="days"
+                            tickLine={false}
+                            axisLine={false}
+                            tickMargin={8}
+                            tickFormatter={(value) => value}
+                          />
+                          <ChartTooltip
+                            cursor={false}
+                            content={<ChartTooltipContent indicator="dot"/>}
+                          />
+                          <Area
+                            dataKey="daysPastLastRecommendation"
+                            type="basis"
+                            fill="var(--color-daysPastLastRecommendation)"
+                            fillOpacity={0.4}
+                            stroke="var(--color-daysPastLastRecommendation)"
+                            stackId="a"
+                          />
+                        </AreaChart>
+                      </ChartContainer>
+                    </CardContent>
+                    <CardFooter>
+                      <div className="flex w-full items-start gap-2 text-sm">
+                        <div className="grid gap-2">
+                          {/*<div className="flex items-center gap-2 font-medium leading-none"></div>*/}
+                          <div className="flex items-center gap-2 leading-none text-muted-foreground">
+                            X-坐标是上次推荐距离当前的天数
+                            遗忘度会随着时间的推移而增加。
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </CardFooter>
+                    </CardFooter>
+                  </div>
                 </div>
-              </div>
-            </CardContent>
+              </CardContent>
+            </div>
           </div>
-        </div>
-      </ScrollArea>
+        </ScrollArea>
 
-      <div className="flex-grow">
-        <Tabs defaultValue="account" className="m-8 ml-0">
-          <TabsList>
-            <TabsTrigger value="sorted">Sorted</TabsTrigger>
-            <TabsTrigger value="recommendation">Recommendation</TabsTrigger>
-          </TabsList>
-          <TabsContent value="sorted" className="rounded border p-4">
-            <SortedPosts data={allPosts} scoreFn={scoreFn}/>
-          </TabsContent>
-          <TabsContent value="recommendation" className="rounded border p-4">
-            <RecommendedPosts/>
-          </TabsContent>
-        </Tabs>
+        <div className="flex-grow">
+          <Tabs defaultValue="sorted" className="m-8 ml-0">
+            <TabsList>
+              <TabsTrigger value="sorted">整体排序</TabsTrigger>
+              <TabsTrigger value="recommendation">模拟推荐</TabsTrigger>
+            </TabsList>
+            <TabsContent value="sorted" className="rounded border p-4">
+              <SortedPosts data={allPosts} scoreFn={scoreFn}/>
+            </TabsContent>
+            <TabsContent value="recommendation" className="rounded border p-4">
+              <RecommendedPosts/>
+            </TabsContent>
+          </Tabs>
+        </div>
       </div>
-    </div>
+    </MathJaxContext>
   );
 }
