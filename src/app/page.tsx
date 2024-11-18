@@ -3,32 +3,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, XAxis } from "recharts";
 import { CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { chartConfig } from "@/app/chart-config";
 import SortedPosts from "@/app/sortedPosts";
 import RecommendedPosts from "@/app/recommendedPosts";
-import { ScrollArea } from "@/components/ui/scroll-area";
-
-const chartConfig = {
-  likes: {
-    label: "#Likes",
-    color: "hsl(var(--chart-1))",
-  },
-  comments: {
-    label: "#Comments",
-    color: "hsl(var(--chart-2))",
-  },
-  daysPastCreation: {
-    label: "#Days Past Creation",
-    color: "hsl(var(--chart-3))",
-  },
-  daysPastLastRecommendation: {
-    label: "#Days Past Last Recommendation",
-    color: "hsl(var(--chart-4))",
-  }
-} satisfies ChartConfig
 
 const chartMargin = {
   left: 12,
@@ -525,9 +507,7 @@ export default function Home() {
             <TabsTrigger value="recommendation">Recommendation</TabsTrigger>
           </TabsList>
           <TabsContent value="sorted" className="rounded border p-4">
-            <ScrollArea style={{height: 'calc(100vh - 142px)'}}>
-              <SortedPosts data={allPosts} scoreFn={scoreFn}/>
-            </ScrollArea>
+            <SortedPosts data={allPosts} scoreFn={scoreFn}/>
           </TabsContent>
           <TabsContent value="recommendation" className="rounded border p-4">
             <RecommendedPosts/>

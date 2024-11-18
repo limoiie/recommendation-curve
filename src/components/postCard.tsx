@@ -1,8 +1,8 @@
 import { CalendarHeart, CalendarPlus, Heart, MessageCircle } from "lucide-react";
 
-export default function PostCard({data}: { data: Post }) {
+export default function PostCard({data, className}: { data: Post, className?: string }) {
   return (
-    <div className="w-96 p-4 flex flex-col gap-1 rounded border">
+    <div className={"p-4 flex flex-col gap-1 rounded border " + className}>
       <div className="flex flex-row gap-4 items-center font-mono text-sm">
         <div className="flex flex-row items-center gap-1">
           <Heart size={16}/>
