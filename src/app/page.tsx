@@ -92,11 +92,11 @@ export default function Home() {
   });
 
   const computeLikesScore = useMemo(() => (post: Post) => {
-    return alpha * (post.likes / 64);
+    return alpha * (post.likes);
   }, [alpha])
 
   const computeCommentsScore = useMemo(() => (post: Post) => {
-    return (1 - alpha) * (post.comments / 64);
+    return (1 - alpha) * (post.comments);
   }, [alpha])
 
   const computeFreshnessScore = useMemo(() => (post: Post) => {
