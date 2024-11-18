@@ -27,11 +27,11 @@ export function makeSortedPostColumns(maxX: number) {
         <PostCard className="w-64" data={data.row.original.post}/>,
       filterFn: (row, _columnId, filterValue) => {
         const {likes, comments, daysPastCreation, daysPastLastRecommendation} = row.original.post;
-        console.debug(likes, comments, daysPastCreation, daysPastLastRecommendation)
+        console.trace(likes, comments, daysPastCreation, daysPastLastRecommendation)
         try {
           return eval(filterValue);
         } catch (e) {
-          console.debug(e)
+          console.trace(e)
           return false;
         }
       }
@@ -39,15 +39,16 @@ export function makeSortedPostColumns(maxX: number) {
     {
       accessorKey: "probabilityComponents", header: "Probability Components", cell: (data) => {
         const pc = data.row.original.probabilityComponents;
-        const deltaByDaysPastLastRecommendation = data.row.original.probability * (1 / pc.daysPastLastRecommendation - 1);
-        const deltaByDaysPastCreation = data.row.original.probability * (1 / pc.daysPastCreation / pc.daysPastLastRecommendation - 1 / pc.daysPastLastRecommendation);
+        const p = data.row.original.probability;
+        const deltaByDaysPastLastRecommendation = pc.daysPastLastRecommendation != 0 ? p * (1 / pc.daysPastLastRecommendation - 1) : p;
+        const deltaByDaysPastCreation = pc.daysPastLastRecommendation != 0 ? p * (1 / pc.daysPastCreation / pc.daysPastLastRecommendation - 1 / pc.daysPastLastRecommendation) : 0;
         return <div>
           <ChartContainer config={chartConfig} className="w-96 h-[24px] aspect-auto">
             <BarChart accessibilityLayer layout="vertical" barSize={10} data={[
               {
                 ...pc,
-                daysPastLastRecommendation: deltaByDaysPastLastRecommendation,
-                daysPastCreation: deltaByDaysPastCreation,
+                daysPastLastRecommendation: deltaByDaysPastLastRecommendation ?? p,
+                daysPastCreation: deltaByDaysPastCreation ?? 0,
               },
             ]}>
               <CartesianGrid horizontal={false}/>
@@ -60,7 +61,7 @@ export function makeSortedPostColumns(maxX: number) {
                 fill="var(--color-likes)"
                 fillOpacity={0.4}
                 stroke="var(--color-likes)"
-                radius={[4, 0, 0, 4]}
+                radius={[0, 0, 0, 0]}
               />
               <Bar
                 dataKey="comments"
@@ -68,7 +69,7 @@ export function makeSortedPostColumns(maxX: number) {
                 fill="var(--color-comments)"
                 fillOpacity={0.4}
                 stroke="var(--color-comments)"
-                radius={[0, 4, 4, 0]}
+                radius={[0, 0, 0, 0]}
               />
               <Bar
                 dataKey="daysPastCreation"
@@ -76,18 +77,20 @@ export function makeSortedPostColumns(maxX: number) {
                 fill="var(--color-daysPastCreation)"
                 fillOpacity={0.1}
                 stroke="var(--color-daysPastCreation)"
+                strokeOpacity={0.5}
                 strokeDasharray={3}
-                strokeDashoffset={4}
+                strokeDashoffset={0}
                 radius={[0, 0, 0, 0]}
               />
               <Bar
                 dataKey="daysPastLastRecommendation"
                 stackId="a"
                 fill="var(--color-daysPastLastRecommendation)"
-                fillOpacity={0.2}
+                fillOpacity={0.1}
                 stroke="var(--color-daysPastLastRecommendation)"
+                strokeOpacity={0.5}
                 strokeDasharray={3}
-                strokeDashoffset={4}
+                strokeDashoffset={0}
                 radius={[0, 0, 0, 0]}
               />
             </BarChart>
@@ -108,7 +111,7 @@ export function makeSortedPostColumns(maxX: number) {
 
       ), cell: (data) => (
         <div className="text-center">
-          {data.row.original.probability.toFixed(4)}
+          {data.row.original.probability.toFixed(3)}
         </div>
       )
     },

@@ -71,7 +71,7 @@ export default function Home() {
   const [chartDataFreshness, setChartDataFreshness] = useState([]);
   const [xsFreshness] = useState(range(0, 28, 1));
 
-  const [gamma, setGamma] = useState(0.5);
+  const [gamma, setGamma] = useState(0.1);
   const [delayDays, setDelayDays] = useState(14);
   const [chartDataForgetting, setChartDataForgetting] = useState([]);
   const [xsForgetting] = useState(range(0, 28, 1));

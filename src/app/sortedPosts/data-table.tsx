@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -45,13 +45,17 @@ export function DataTable<TData, TValue>(
     },
   })
 
+  useEffect(() => {
+    table.getColumn("postWithProbability")?.setFilterValue("likes + comments == 160");
+  }, [table]);
+
   return (
     <div>
       <div className="flex flex-col align-baseline gap-2 py-4">
         <Label htmlFor="filter">过滤表达式:</Label>
         <Input
           id="filter"
-          placeholder="likes > 0 && comments > 0"
+          placeholder="likes + comments == 160"
           value={(table.getColumn("postWithProbability")?.getFilterValue() as string) ?? ""}
           onChange={(event) =>
             table.getColumn("postWithProbability")?.setFilterValue(event.target.value)
