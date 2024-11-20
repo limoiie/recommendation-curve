@@ -26,38 +26,21 @@ function range(start: number, end: number, step: number) {
   return range;
 }
 
-function cartesianProduct(arr: number[][]) {
-  const result: number[][] = [];
-
-  function helper(arr: number[][], index: number, current: number[]) {
-    if (index === arr.length) {
-      result.push(current.slice());
-      return;
-    }
-    for (const item of arr[index]) {
-      current.push(item);
-      helper(arr, index + 1, current);
-      current.pop();
-    }
-  }
-
-  helper(arr, 0, []);
-  return result;
-}
-
-function newPost({
-                   title = '',
-                   likes = 0,
-                   comments = 0,
-                   daysPastCreation = 0,
-                   daysPastLastRecommendation = 0
-                 }: Partial<Post>) {
+function newPost(
+  {
+    title = '',
+    likes = 0,
+    comments = 0,
+    hoursSinceCreation = 0,
+    daysSinceLastRecommendation = 0
+  }: Partial<Post>
+) {
   return {
     title: title,
     likes: likes,
     comments: comments,
-    daysPastCreation: daysPastCreation,
-    daysPastLastRecommendation: daysPastLastRecommendation,
+    hoursSinceCreation: hoursSinceCreation,
+    daysSinceLastRecommendation: daysSinceLastRecommendation,
   };
 }
 
@@ -66,30 +49,20 @@ export default function Home() {
   const [chartDataPopularity, setChartDataPopularity] = useState([]);
   const [xsPopularity] = useState(range(0, 50, 10));
 
-  const [freshDays, setFreshDays] = useState(7);
-  const [beta, setBeta] = useState(0.8);
+  const [freshHours, setFreshHours] = useState(9);
+  const [beta, setBeta] = useState(0.5);
+  const [omega, setOmega] = useState(10);
   const [chartDataFreshness, setChartDataFreshness] = useState([]);
-  const [xsFreshness] = useState(range(0, 28, 1));
+  const [xsFreshness] = useState(range(0, 48, 2));
 
   const [gamma, setGamma] = useState(0.1);
   const [delayDays, setDelayDays] = useState(14);
   const [chartDataForgetting, setChartDataForgetting] = useState([]);
   const [xsForgetting] = useState(range(0, 28, 1));
 
-  const allPosts = cartesianProduct([
-    [0, 10, 20, 40, 80, 160],
-    [0, 10, 20, 40, 80, 160],
-    [2, 4, 8, 16],
-    [-1, 2, 8, 16],
-  ]).map(([likes, comments, daysPastCreation, daysPastLastRecommendation]) => {
-    return {
-      title: "",
-      likes: likes,
-      comments: comments,
-      daysPastCreation: daysPastCreation,
-      daysPastLastRecommendation: daysPastLastRecommendation,
-    };
-  });
+  const [data, setData] = useState<Post[]>([]); // Use an array if your JSON contains an array
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
   const computeLikesScore = useMemo(() => (post: Post) => {
     return alpha * (post.likes);
@@ -100,14 +73,14 @@ export default function Home() {
   }, [alpha])
 
   const computeFreshnessScore = useMemo(() => (post: Post) => {
-    return 1 / (1 + Math.exp(beta * (post.daysPastCreation - freshDays)));
-  }, [beta, freshDays])
+    return omega / (1 + Math.exp(beta * (post.hoursSinceCreation - freshHours)));
+  }, [omega, beta, freshHours])
 
   const computeForgettingScore = useMemo(() => (post: Post) => {
-    if (post.daysPastLastRecommendation < 0) {
+    if (post.daysSinceLastRecommendation < 0) {
       return 1.0;
     }
-    return 1.0 - Math.min(Math.exp(-gamma * (post.daysPastLastRecommendation - delayDays)), 1.0);
+    return 1.0 - Math.min(Math.exp(-gamma * (post.daysSinceLastRecommendation - delayDays)), 1.0);
   }, [gamma, delayDays])
 
   const scoreFn = useMemo(() => {
@@ -116,18 +89,38 @@ export default function Home() {
       const pc = computeCommentsScore(post);
       const f = computeFreshnessScore(post);
       const s = computeForgettingScore(post);
-      const score = (pl + pc) * f * s;
+      const score = (pl + pc + f) * s;
       return {
         score: score,
         probabilityComponents: {
-          likes: pl * f * s,
-          comments: pc * f * s,
-          daysPastCreation: f,
-          daysPastLastRecommendation: s,
+          likes: pl * s,
+          comments: pc * s,
+          hoursSinceCreation: f * s,
+          daysSinceLastRecommendation: s,
         }
       }
     }
   }, [computeLikesScore, computeCommentsScore, computeFreshnessScore, computeForgettingScore]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const response = await fetch('/post.json'); // Fetching data from public folder
+        if (!response.ok) {
+          setError(Error('Failed to fetch: ' + response.statusText));
+          setLoading(false);
+          return;
+        }
+        const jsonData: Post[] = await response.json();
+        setData(jsonData);
+        setLoading(false);
+      } catch (err: unknown) {
+        setError(err as Error);
+      }
+    };
+
+    fetchData().then(r => console.log(r));
+  }, []); // Empty dependency array to run only once on component mount
 
   // Generate data for the popularity chart
   useEffect(() => {
@@ -146,18 +139,18 @@ export default function Home() {
     const chartDataFreshness = xsFreshness.map((x) => {
       return {
         days: x,
-        daysPastCreation: computeFreshnessScore(newPost({daysPastCreation: x})),
+        hoursSinceCreation: computeFreshnessScore(newPost({hoursSinceCreation: x})),
       };
     });
     setChartDataFreshness(chartDataFreshness as never[]);
-  }, [computeFreshnessScore, xsFreshness, freshDays, beta]);
+  }, [computeFreshnessScore, xsFreshness, freshHours, beta]);
 
   // Generate data for the Forgetting chart
   useEffect(() => {
     const chartDataForgetting = xsForgetting.map((x) => {
       return {
         days: x,
-        daysPastLastRecommendation: computeForgettingScore(newPost({daysPastLastRecommendation: x})),
+        daysSinceLastRecommendation: computeForgettingScore(newPost({daysSinceLastRecommendation: x})),
       };
     });
     setChartDataForgetting(chartDataForgetting as never[]);
@@ -170,10 +163,17 @@ export default function Home() {
     }
   }
 
-  function handleFreshDaysChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const newFreshDays = parseInt(e.target.value);
-    if (!isNaN(newFreshDays) && newFreshDays >= 0 && newFreshDays <= 28) {
-      setFreshDays(newFreshDays);
+  function handleOmegaChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const newOmega = parseFloat(e.target.value);
+    if (!isNaN(newOmega) && newOmega >= 0) {
+      setOmega(newOmega);
+    }
+  }
+
+  function handleFreshHoursChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const newFreshHours = parseFloat(e.target.value);
+    if (!isNaN(newFreshHours) && newFreshHours >= 0 && newFreshHours <= 28) {
+      setFreshHours(newFreshHours);
     }
   }
 
@@ -198,6 +198,9 @@ export default function Home() {
     }
   }
 
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error.message}</div>;
+
   return (
     <MathJaxContext>
       <div className="flex flex-row">
@@ -207,7 +210,7 @@ export default function Home() {
               <CardHeader className="pb-0">
                 <CardTitle>整体推荐度评分公式</CardTitle>
                 <CardDescription>
-                  评分公式由人气评分、新鲜度评分和遗忘度三部分组成。
+                  评分公式由人气评分、新鲜度评分和遗忘率三部分组成。
                   每个部分的权重和参数可以调整以获得不同的推荐效果。
                   <MathJax>
                     {/*{String.raw`*/}
@@ -218,7 +221,7 @@ export default function Home() {
                     {/*  \] `}*/}
                     {String.raw`
                       \[
-                        \mathtt{Score} = S_\mathtt{popularity} \times P_\mathtt{freshness} \times P_\mathtt{Forgetting} \\
+                        \mathtt{Score} = (S_\mathtt{popularity} + S_\mathtt{freshness}) \times P_\mathtt{Forgetting} \\
                       \] `}
                   </MathJax>
                 </CardDescription>
@@ -324,7 +327,7 @@ export default function Home() {
                   <MathJax>
                     {String.raw`
                       \[
-                        P_\mathtt{freshness} = \frac{1}{1 + e^{\beta \times (x - \mathtt{freshDays})}}
+                        S_\mathtt{freshness} = \frac{\omega}{1 + e^{\beta \times (x - \mathtt{freshHours})}}
                       \]
                     `}
                   </MathJax>
@@ -334,15 +337,27 @@ export default function Home() {
                 <div className="flex flex-row space-x-4">
                   <div className="flex flex-col min-w-32 w-32 space-y-4">
                     <div className="grid w-full max-w-sm items-center gap-1.5">
-                      <Label><MathJax>{String.raw`\( \mathtt{freshDays} \)`} <span
-                        className="text-neutral-500">(该天数内新鲜度 &gt;0.5)</span></MathJax></Label>
+                      <Label><MathJax>{String.raw`\( \omega \)`} <span
+                        className="text-neutral-500">(新鲜度系数)</span></MathJax></Label>
+                      <Input
+                        type="number"
+                        step=".2"
+                        id="omega"
+                        placeholder="Omega"
+                        value={omega}
+                        onChange={handleOmegaChange}
+                        min={0}/>
+                    </div>
+                    <div className="grid w-full max-w-sm items-center gap-1.5">
+                      <Label><MathJax>{String.raw`\( \mathtt{freshHours} \)`} <span
+                        className="text-neutral-500">(该小时内新鲜度 &gt;0.5)</span></MathJax></Label>
                       <Input
                         type="number"
                         step="1"
-                        id="freshDays"
+                        id="freshHours"
                         placeholder="Fresh Days"
-                        value={freshDays}
-                        onChange={handleFreshDaysChange}
+                        value={freshHours}
+                        onChange={handleFreshHoursChange}
                         min={0}
                         max={28}/>
                     </div>
@@ -388,11 +403,11 @@ export default function Home() {
                             content={<ChartTooltipContent indicator="dot"/>}
                           />
                           <Area
-                            dataKey="daysPastCreation"
+                            dataKey="hoursSinceCreation"
                             type="basis"
-                            fill="var(--color-daysPastCreation)"
+                            fill="var(--color-hoursSinceCreation)"
                             fillOpacity={0.4}
-                            stroke="var(--color-daysPastCreation)"
+                            stroke="var(--color-hoursSinceCreation)"
                             stackId="a"
                           />
                         </AreaChart>
@@ -414,7 +429,7 @@ export default function Home() {
             </div>
             <div className="flex flex-col m-8 rounded border">
               <CardHeader>
-                <CardTitle>遗忘度</CardTitle>
+                <CardTitle>遗忘率</CardTitle>
                 <CardDescription>
                   基于上次推荐的时间得出的衰减因子，
                   以避免过于频繁地推荐相同的帖子。
@@ -485,11 +500,11 @@ export default function Home() {
                             content={<ChartTooltipContent indicator="dot"/>}
                           />
                           <Area
-                            dataKey="daysPastLastRecommendation"
+                            dataKey="daysSinceLastRecommendation"
                             type="basis"
-                            fill="var(--color-daysPastLastRecommendation)"
+                            fill="var(--color-daysSinceLastRecommendation)"
                             fillOpacity={0.4}
-                            stroke="var(--color-daysPastLastRecommendation)"
+                            stroke="var(--color-daysSinceLastRecommendation)"
                             stackId="a"
                           />
                         </AreaChart>
@@ -501,7 +516,7 @@ export default function Home() {
                           {/*<div className="flex items-center gap-2 font-medium leading-none"></div>*/}
                           <div className="flex items-center gap-2 leading-none text-muted-foreground">
                             X-坐标是上次推荐距离当前的天数
-                            遗忘度会随着时间的推移而增加。
+                            遗忘率会随着时间的推移而增加。
                           </div>
                         </div>
                       </div>
@@ -520,7 +535,7 @@ export default function Home() {
               <TabsTrigger value="recommendation">模拟推荐</TabsTrigger>
             </TabsList>
             <TabsContent value="sorted" className="rounded border p-4">
-              <SortedPosts data={allPosts} scoreFn={scoreFn}/>
+              <SortedPosts data={data} scoreFn={scoreFn}/>
             </TabsContent>
             <TabsContent value="recommendation" className="rounded border p-4">
               <RecommendedPosts/>

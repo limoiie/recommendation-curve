@@ -25,8 +25,8 @@ export default function SortedPosts({data, scoreFn}: {
       sorted[i].probabilityComponents = {
         likes: sorted[i].probabilityComponents.likes / totalScore,
         comments: sorted[i].probabilityComponents.comments / totalScore,
-        daysPastCreation: sorted[i].probabilityComponents.daysPastCreation,
-        daysPastLastRecommendation: sorted[i].probabilityComponents.daysPastLastRecommendation,
+        hoursSinceCreation: sorted[i].probabilityComponents.hoursSinceCreation / totalScore,
+        daysSinceLastRecommendation: sorted[i].probabilityComponents.daysSinceLastRecommendation,
       }
     }
 

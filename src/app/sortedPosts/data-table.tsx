@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React from "react";
 
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -45,10 +45,6 @@ export function DataTable<TData, TValue>(
     },
   })
 
-  useEffect(() => {
-    table.getColumn("postWithProbability")?.setFilterValue("likes + comments == 160");
-  }, [table]);
-
   return (
     <div>
       <div className="flex flex-col align-baseline gap-2 py-4">
@@ -63,7 +59,7 @@ export function DataTable<TData, TValue>(
           className="max-w-sm font-mono"
         />
         <CardDescription className="text-sm">
-          (JS 表达式，可用变量 <span className="font-mono">likes, comments, daysPastCreation, daysPastLastRecommendation</span>)
+          (JS 表达式，可用变量 <span className="font-mono">likes, comments, hoursSinceCreation, daysSinceLastRecommendation</span>)
         </CardDescription>
       </div>
       <div className="rounded-md border">

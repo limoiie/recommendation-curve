@@ -9,11 +9,11 @@ export const chartConfig = {
     label: "#评论数对推荐概率的贡献",
     color: "hsl(var(--chart-2))",
   },
-  daysPastCreation: {
-    label: "#创建后经过的天数对推荐概率的损失",
+  hoursSinceCreation: {
+    label: "#新鲜度对推荐概率的贡献",
     color: "hsl(var(--chart-3))",
   },
-  daysPastLastRecommendation: {
+  daysSinceLastRecommendation: {
     label: "#推荐后经过的天数对推荐概率的损失",
     color: "hsl(var(--chart-4))",
   }
