@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -45,9 +45,13 @@ export function DataTable<TData, TValue>(
     },
   })
 
+  useEffect(() => {
+    table.setPageSize(6)
+  }, [table])
+
   return (
     <div>
-      <div className="flex flex-col align-baseline gap-2 py-4">
+      <div className="flex flex-col align-baseline gap-2 py-4 hidden">
         <Label htmlFor="filter">过滤表达式:</Label>
         <Input
           id="filter"
